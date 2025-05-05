@@ -100,7 +100,7 @@ def check_in_train_set(pos, dataset):
 
 
 # Check if the location is in the test set
-def check_in_test_set(pos, dataset):
+def check_in_test_set(pos, dataset, region_test_centers, region_test_radius):
     # returns true if position is in evaluation split
     assert pos.ndim == 2
     assert pos.shape[1] == 2
@@ -111,8 +111,8 @@ def check_in_test_set(pos, dataset):
         test_region_centers = mulran_test_region_centers
         test_region_radius = mulran_test_region_radius 
     elif dataset == "kitti":
-        test_region_centers = kitti_test_region_centers
-        test_region_radius = kitti_test_region_radius        
+        test_region_centers = region_test_centers
+        test_region_radius = region_test_radius        
     elif dataset == "oxford_radar":
         test_region_centers = oxford_radar_test_region_centers
         test_region_radius = oxford_radar_test_region_radius           

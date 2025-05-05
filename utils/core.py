@@ -23,7 +23,7 @@ from skimage.transform import radon, iradon, rescale
 
 np.seterr(divide='ignore',invalid='ignore')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-InstanceNorm = nn.InstanceNorm2d(1, affine=False, track_running_stats=False)
+InstanceNorm = nn.InstanceNorm2d(6, affine=False, track_running_stats=False)
 
 
 ############ FFT Operations ############

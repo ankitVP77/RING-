@@ -21,6 +21,7 @@ from datasets.OxfordRadarDataset import OxfordRadarPointCloudLoader
 from evaluation.plot_pose_errors import plot_cdf
 from evaluation.plot_PR_curve import compute_PR_pairs
 from evaluation.generate_evaluation_sets import EvaluationSet, EvaluationTuple
+import sys
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -36,8 +37,12 @@ def generate_representations(dataset: str, eval_subset: List[EvaluationTuple], b
     
     pcs = []
     pc_bevs = []
+    pc_bevs_cpu = []
     pc_RINGs = []
+    pc_RINGs_cpu = []
     pc_TIRINGs = []
+    pc_TIRINGs_cpu = []
+
     if dataset == 'nclt':
         pc_loader = NCLTPointCloudLoader()
     elif dataset == 'kitti':
@@ -69,10 +74,13 @@ def generate_representations(dataset: str, eval_subset: List[EvaluationTuple], b
             
         pcs.append(pc)
         pc_bevs.append(pc_bev)
+        pc_bevs_cpu.append(pc_bev.cpu())
         pc_RINGs.append(pc_RING)
+        pc_RINGs_cpu.append(pc_RING.cpu())
         pc_TIRINGs.append(pc_TIRING)
+        pc_TIRINGs_cpu.append(pc_TIRING.cpu())
     
-    return pcs, pc_bevs, pc_RINGs, pc_TIRINGs
+    return pcs, pc_bevs, pc_RINGs, pc_TIRINGs, pc_bevs_cpu, pc_RINGs_cpu, pc_TIRINGs_cpu
 
 
 def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = [5.0, 10.0, 15.0, 20.0], num_k: int = 25, bev_type: str = "occ"):
@@ -84,10 +92,26 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
     map_set = eval_set.map_set
     query_set = eval_set.query_set
 
-    map_pcs, map_bevs, map_RINGs, map_TIRINGs = generate_representations(dataset, map_set, bev_type)
-    query_pcs, query_bevs, query_RINGs, query_TIRINGs = generate_representations(dataset, query_set, bev_type)
+    map_pcs, map_bevs, map_RINGs, map_TIRINGs, map_bevs_cpu, map_RINGS_cpu, map_TIRINGS_cpu = generate_representations(dataset, map_set, bev_type)
+    query_pcs, query_bevs, query_RINGs, query_TIRINGs, query_bevs_cpu, query_RINGs_cpu, query_TIRINGs_cpu = generate_representations(dataset, query_set, bev_type)
     
     C, H, W = map_bevs[0].shape
+
+    print("--------Memory usage--------")
+    print(f"Number of map bevs: {len(map_bevs)}")
+    print(f"Number of map rings: {len(map_RINGs)}")
+    print(f"Number of map TIRINGs: {len(map_TIRINGs)}")
+    print(f"Number of query bevs: {len(query_bevs)}")
+    print(f"Number of query rings: {len(query_RINGs)}")
+    print(f"Number of query TIRINGs: {len(query_TIRINGs)}")
+    print(f"Shape of map bevs: {map_bevs_cpu[0].nbytes}")
+    print(f"Shape of map rings: {map_RINGS_cpu[0].nbytes}")
+    print(f"Shape of map TIRINGs: {map_TIRINGs[0].nbytes}")
+    print(f"Shape of query bevs: {query_bevs[0].nbytes}")
+    print(f"Shape of query rings: {query_RINGs[0].nbytes}")
+    print(f"Shape of query TIRINGs: {query_TIRINGs[0].nbytes}")
+
+    sys.exit()
 
     map_xys = eval_set.get_map_positions()
     map_poses = eval_set.get_map_poses()
@@ -132,6 +156,8 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
                 map_TIRING = [map_TIRINGs[k] for k in range(i*cfg.batch_size, (i+1)*cfg.batch_size)]
                 map_TIRING = torch.stack(map_TIRING, dim=0).reshape((-1, C, H, W))
             # batch_dists, batch_angles = fast_corr(query_TIRING_repeated, map_TIRING)
+            # print(f"query_TIRING_repeated shape: {query_TIRING_repeated.shape}")
+            # print(f"map_TIRING shape: {map_TIRING.shape}")
             batch_dists, batch_angles = batch_circorr(query_TIRING_repeated, map_TIRING)
             if i == 0:
                 dists = batch_dists
@@ -148,6 +174,8 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
         idx_top1 = idxs_sorted[0]
         for j, revisit_threshold in enumerate(revisit_thresholds):
             true_neighbors = tree.query_radius(query_xy.reshape(1,-1), revisit_threshold)[0]
+            # print(query_xy, revisit_threshold, true_neighbors)
+            # sys.exit()
             # Recall@k
             for k in range(num_k):
                 # if np.linalg.norm(map_xys[idxs_sorted[k]] - query_xy) < revisit_threshold:
@@ -203,19 +231,19 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
                 trans_errors[j, query_ndx] = trans_err
 
                 # ------------ Pose Refinement ------------
-                init_pose = xyz_ypr2m(pred_x, pred_y, 0, pred_yaw, 0, 0)
-                times = time.time()
-                icp_fitness_score, loop_transform = fast_gicp(query_pc, map_pc, max_correspondence_distance=cfg.icp_max_distance, init_pose=init_pose)
-                # icp_fitness_score, loop_transform, _ = o3d_icp(query_pc, map_pc, transform=init_pose, point2plane=True, inlier_dist_threshold=cfg.icp_max_distance)
-                timee = time.time()    
-                # print("ICP processed time:", timee - times, 's')
+                # init_pose = xyz_ypr2m(pred_x, pred_y, 0, pred_yaw, 0, 0)
+                # times = time.time()
+                # icp_fitness_score, loop_transform = fast_gicp(query_pc, map_pc, max_correspondence_distance=cfg.icp_max_distance, init_pose=init_pose)
+                # # icp_fitness_score, loop_transform, _ = o3d_icp(query_pc, map_pc, transform=init_pose, point2plane=True, inlier_dist_threshold=cfg.icp_max_distance)
+                # timee = time.time()    
+                # # print("ICP processed time:", timee - times, 's')
 
-                x, y, z, yaw, pitch, roll = m2xyz_ypr(loop_transform)
-                print("Refined translation: x: {}, y: {}, rotation: {}".format(x, y, yaw))
+                # x, y, z, yaw, pitch, roll = m2xyz_ypr(loop_transform)
+                # print("Refined translation: x: {}, y: {}, rotation: {}".format(x, y, yaw))
 
-                icp_rte, icp_rre = cal_pose_error(loop_transform, rel_pose)
-                icp_rot_errors[j, query_ndx] = icp_rre
-                icp_trans_errors[j, query_ndx] = icp_rte
+                # icp_rte, icp_rre = cal_pose_error(loop_transform, rel_pose)
+                # icp_rot_errors[j, query_ndx] = icp_rre
+                # icp_trans_errors[j, query_ndx] = icp_rte
 
 
     thresholds1 = np.linspace(0, 0.35, 10) 
@@ -252,20 +280,20 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
         # ------------ Pose Error ------------ 
         mean_rot_error = np.mean(rot_errors[j])
         mean_trans_error = np.mean(trans_errors[j])
-        mean_icp_rot_error = np.mean(icp_rot_errors[j])
-        mean_icp_trans_error = np.mean(icp_trans_errors[j])    
+        # mean_icp_rot_error = np.mean(icp_rot_errors[j])
+        # mean_icp_trans_error = np.mean(icp_trans_errors[j])    
         rot_error_quantiles = np.quantile(rot_errors[j], quantiles)
         trans_error_quantiles = np.quantile(trans_errors[j], quantiles)
-        icp_rot_error_quantiles = np.quantile(icp_rot_errors[j], quantiles)
-        icp_trans_error_quantiles = np.quantile(icp_trans_errors[j], quantiles)    
+        # icp_rot_error_quantiles = np.quantile(icp_rot_errors[j], quantiles)
+        # icp_trans_error_quantiles = np.quantile(icp_trans_errors[j], quantiles)    
         print(f"Mean rotation error at {revisit_threshold} m: {mean_rot_error}")    
         print(f"Mean translation error at {revisit_threshold} m: {mean_trans_error}")
-        print(f"Mean icp rotation error at {revisit_threshold} m: {mean_icp_rot_error}")    
-        print(f"Mean icp translation error at {revisit_threshold} m: {mean_icp_trans_error}")    
+        # print(f"Mean icp rotation error at {revisit_threshold} m: {mean_icp_rot_error}")    
+        # print(f"Mean icp translation error at {revisit_threshold} m: {mean_icp_trans_error}")    
         print(f"Rotation error quantiles at {revisit_threshold} m: {rot_error_quantiles}")
         print(f"Translation error quantiles at {revisit_threshold} m: {trans_error_quantiles}")
-        print(f"ICP rotation error quantiles at {revisit_threshold} m: {icp_rot_error_quantiles}")
-        print(f"ICP translation error quantiles at {revisit_threshold} m: {icp_trans_error_quantiles}")
+        # print(f"ICP rotation error quantiles at {revisit_threshold} m: {icp_rot_error_quantiles}")
+        # print(f"ICP translation error quantiles at {revisit_threshold} m: {icp_trans_error_quantiles}")
 
         save_path = f'{folder}/rot_error_cdf_{bev_type}_{revisit_threshold}m.pdf'
         plot_cdf(rot_errors[j], save_path=save_path, xlabel='Rotation Error (degrees)', ylabel='CDF', title='Rotation error CDF')
@@ -277,17 +305,17 @@ def evaluate(dataset, eval_set_filepath: str, revisit_thresholds: List[float] = 
     np.savetxt(f'{folder}/f1s_{bev_type}.txt', f1s_all)
     np.savetxt(f'{folder}/rot_errors_{bev_type}.txt', rot_errors)
     np.savetxt(f'{folder}/trans_errors_{bev_type}.txt', trans_errors)
-    np.savetxt(f'{folder}/icp_rot_errors_{bev_type}.txt', icp_rot_errors)
-    np.savetxt(f'{folder}/icp_trans_errors_{bev_type}.txt', icp_trans_errors)
+    # np.savetxt(f'{folder}/icp_rot_errors_{bev_type}.txt', icp_rot_errors)
+    # np.savetxt(f'{folder}/icp_trans_errors_{bev_type}.txt', icp_trans_errors)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="nclt", help="dataset type (nclt / mulran / kitti / oxford_radar)")
-    parser.add_argument('--eval_set_filepath', type=str, required=True, help='File path of the evaluation pickle')
-    parser.add_argument('--revisit_thresholds', type=float, nargs='+', default=[5.0, 10.0, 15.0, 20.0], help='Revisit thresholds in meters')
-    parser.add_argument('--num_k', type=int, default=25, help='Number of nearest neighbors for recall@k')
-    parser.add_argument('--bev_type', type=str, default="occ", help='BEV type (occ / feat)')
+    parser.add_argument("--dataset", type=str, default="kitti", help="dataset type (nclt / mulran / kitti / oxford_radar)")
+    parser.add_argument('--eval_set_filepath', type=str, default="/home/jiuzl/Work/RING-/data/KITTI/test_05_05_5.0_2.0_300.0.pickle", help='File path of the evaluation pickle')
+    parser.add_argument('--revisit_thresholds', type=float, nargs='+', default=[10.0, 20.0, 30.0, 40.0, 50.0], help='Revisit thresholds in meters')
+    parser.add_argument('--num_k', type=int, default=3, help='Number of nearest neighbors for recall@k')
+    parser.add_argument('--bev_type', type=str, default="feat", help='BEV type (occ / feat)')
     args = parser.parse_args()
 
     print(f'Dataset: {args.dataset}')

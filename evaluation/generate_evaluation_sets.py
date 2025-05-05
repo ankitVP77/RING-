@@ -133,8 +133,8 @@ map_sampling_distance: float = 20.0, query_sampling_distance: float = 5.0, dist_
         map = MulRanSequence(dataset_root, sequence_name=map_sequence, split=split, sampling_distance=map_sampling_distance)
         query = MulRanSequence(dataset_root, sequence_name=query_sequence, split=split, sampling_distance=query_sampling_distance)
     elif dataset == "kitti":
-        map = KITTISequence(dataset_root, sequence_name=map_sequence, split=split, sampling_distance=map_sampling_distance)
-        query = KITTISequence(dataset_root, sequence_name=query_sequence, split=split, sampling_distance=query_sampling_distance)
+        map = KITTISequence(dataset_root, sequence_name=map_sequence, split=split, sampling_distance=map_sampling_distance, region_test_center=np.array([[0, 0]]), region_test_radius=300)
+        query = KITTISequence(dataset_root, sequence_name=query_sequence, split=split, sampling_distance=query_sampling_distance, region_test_center=np.array([[167.5, 75.5]]), region_test_radius=200)
     elif dataset == "oxford_radar":
         map = OxfordRadarSequence(dataset_root, sequence_name=map_sequence, split=split, sampling_distance=map_sampling_distance)
         query = OxfordRadarSequence(dataset_root, sequence_name=query_sequence, split=split, sampling_distance=query_sampling_distance)
@@ -152,13 +152,13 @@ map_sampling_distance: float = 20.0, query_sampling_distance: float = 5.0, dist_
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="nclt", help="dataset type (nclt / mulran / kitti / oxford_radar)")
-    parser.add_argument("--dataset_root", type=str, default="./data/NCLT", help="path to the dataset root")
-    parser.add_argument("--map_sequence", type=str, default="2012-02-04", help="map sequence for loop closure detection")
-    parser.add_argument("--query_sequence", type=str, default="2012-03-17", help="query sequence for loop closure detection")
-    parser.add_argument("--map_sampling_distance", type=float, default=20.0, help="map sampling distance in meters")
-    parser.add_argument("--query_sampling_distance", type=float, default=5.0, help="query sampling distance in meters")
-    parser.add_argument("--dist_threshold", type=float, default=20.0, help="revisit threshold in meters")
+    parser.add_argument("--dataset", type=str, default="kitti", help="dataset type (nclt / mulran / kitti / oxford_radar)")
+    parser.add_argument("--dataset_root", type=str, default="./data/KITTI", help="path to the dataset root")
+    parser.add_argument("--map_sequence", type=str, default="05", help="map sequence for loop closure detection")
+    parser.add_argument("--query_sequence", type=str, default="05", help="query sequence for loop closure detection")
+    parser.add_argument("--map_sampling_distance", type=float, default=5.0, help="map sampling distance in meters") #10
+    parser.add_argument("--query_sampling_distance", type=float, default=2.0, help="query sampling distance in meters") #5
+    parser.add_argument("--dist_threshold", type=float, default=300.0, help="revisit threshold in meters")
     args = parser.parse_args()
     
     print(f'Dataset: {args.dataset}')

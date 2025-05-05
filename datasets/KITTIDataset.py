@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.neighbors import KDTree
 from scipy.spatial import distance_matrix
 from torch.utils.data import Dataset, ConcatDataset, DataLoader
+import sys
 
 
 # calibration matrix
@@ -86,9 +87,11 @@ class KITTISequence(Dataset):
     """
     Single KITTI sequence indexed as a single dataset containing point clouds and poses
     """
-    def __init__(self, dataset_root: str, sequence_name: str, split: str = 'train', sampling_distance: float = 0.2):
+    def __init__(self, dataset_root: str, sequence_name: str, region_test_center, region_test_radius, split: str = 'train', sampling_distance: float = 0.2):
         assert os.path.exists(dataset_root), f'Cannot access dataset root: {dataset_root}'
         assert split in ['train', 'test', 'all']
+        self.region_test_center = region_test_center
+        self.region_test_radius = region_test_radius
         self.dataset_root = dataset_root
         self.sequence_name = sequence_name
         self.sequence_path = os.path.join(self.dataset_root, self.sequence_name)
@@ -170,6 +173,16 @@ class KITTISequence(Dataset):
                                     [float(temp[8]), float(temp[9]), float(temp[10]), float(temp[11])],
                                     [0., 0., 0., 1.]])
             poses[ndx] = np.linalg.inv(calib) @ (poses[ndx] @ calib)
+        
+        first_pose_xyz = np.array([[0, 0, 0, poses[0][0, 3]],
+                                   [0, 0, 0, poses[0][1, 3]],
+                                   [0, 0, 0, poses[0][2, 3]],
+                                   [0, 0, 0, 0]])
+        
+        # Centering poses about the first pose in dataset
+        print("Pose Before centering:" , poses[:3])
+        poses = poses - first_pose_xyz
+        print("Pose After centering:" , poses[:3])
 
         # List LiDAR scan timestamps
         all_lidar_timestamps = [int(os.path.splitext(f)[0]) for f in os.listdir(self.lidar_path) if
@@ -182,35 +195,55 @@ class KITTISequence(Dataset):
         lidar_poses = []
         count_rejected = 0
 
-        for ndx, lidar_ts in enumerate(all_lidar_timestamps):
+        # print(all_lidar_timestamps[:10])
+        # print(np.flip(system_timestamps)[:10])
+
+        all_lidar_timestamps_relative = np.array(all_lidar_timestamps) - all_lidar_timestamps[0]
+        system_timestamps_relative = np.array(system_timestamps) - system_timestamps[0]
+
+        for ndx, lidar_ts in enumerate(all_lidar_timestamps_relative):
             # Find index of the closest timestamp
-            closest_ts_ndx = find_nearest_ndx(lidar_ts, system_timestamps)
-            delta = abs(system_timestamps[closest_ts_ndx] - lidar_ts)
+            closest_ts_ndx = find_nearest_ndx(lidar_ts, system_timestamps_relative)
+            delta = abs(system_timestamps_relative[closest_ts_ndx] - lidar_ts)
             # Timestamp is in nanoseconds = 1e-9 second
             if delta > self.pose_time_tolerance * 1000000000:
                 # Reject point cloud without corresponding pose
                 count_rejected += 1
                 continue
-
+            
+            lidar_ts_actual = all_lidar_timestamps[ndx]
             lidar_timestamps.append(lidar_ts)
-            lidar_filepaths.append(os.path.join(self.lidar_path, f'{lidar_ts}.bin'))
+            lidar_filepaths.append(os.path.join(self.lidar_path, f'{lidar_ts_actual:06d}.bin'))
             lidar_poses.append(poses[closest_ts_ndx])
 
         lidar_timestamps = np.array(lidar_timestamps, dtype=np.int64)
         lidar_filepaths = np.array(lidar_filepaths)
         lidar_poses = np.array(lidar_poses, dtype=np.float32)     # 4x4 pose matrix
         lidar_xys = lidar_poses[:, :2, 3]                         # 2D position
+        ori_poses_xys = poses[:, :2, 3]
+
+        print("Maximum absolute values of lidar_xys:", np.max(np.abs(lidar_xys), axis=0))
+        print("Number of unique lidar_xys:", np.unique(lidar_xys, axis=0).shape)
+        print("Number of unique original poses:", np.unique(ori_poses_xys, axis=0).shape)
+        print("Shape of lidar_xys:", lidar_xys.shape)
+        print("Number of rejected scans: ", count_rejected)
+        print(lidar_xys[:5])
+        print(lidar_timestamps[:5])
+        print(lidar_filepaths[:5])
         
         # Split data into train / test set
         if self.split != 'all':      
             if self.split == 'train':
                 mask = check_in_train_set(lidar_xys, dataset='kitti')
             elif self.split == 'test':
-                mask = check_in_test_set(lidar_xys, dataset='kitti')
+                print("----------------Splitting into test set---------")
+                mask = check_in_test_set(lidar_xys, dataset='kitti', region_test_centers=self.region_test_center, region_test_radius=self.region_test_radius)
             lidar_timestamps = lidar_timestamps[mask]
             lidar_filepaths = lidar_filepaths[mask]
             lidar_poses = lidar_poses[mask]
             lidar_xys = lidar_xys[mask]
+        
+        print("After split, number of lidar_xys:", lidar_xys.shape)
 
         # Sample lidar scans 
         prev_position = None

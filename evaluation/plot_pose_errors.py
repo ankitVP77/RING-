@@ -43,9 +43,9 @@ def data_to_df(data, label, method):
 if __name__ == "__main__":
     # settings
     icp = False
-    bev_type = 'occ' # 'occ' or 'feat'
+    bev_type = 'feat' # 'occ' or 'feat'
     method = 'RING' if bev_type == 'occ' else 'RING++'
-    results_path = f'./results/nclt/test_2012-02-04_2012-03-17_20.0_5.0_10.0/revisit_5.0_10.0_15.0_20.0'
+    results_path = f'/home/jiuzl/Work/RING-/results/kitti/test_05_05_5.0_5.0_300.0/revisit_100.0_120.0_140.0_160.0_200.0'
     revisit_thresholds = results_path.split('/')[-1].split('_')[1:]
     quantiles = [0.25, 0.5, 0.75, 0.95]
     

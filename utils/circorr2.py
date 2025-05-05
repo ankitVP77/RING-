@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms.functional as fn
 import matplotlib.pyplot as plt
+import sys
 
 # compute the max correlation value and the corresponding circular shift 
 # calculate the correlation and relative rotation between a and b (from a to b, point cloud transformation) using fft method
@@ -17,7 +18,7 @@ class circorr2(nn.Module):
 
     def __init__(self, is_circular=True, zero_mean_normalize=False):
         super(circorr2, self).__init__()
-        self.InstanceNorm = nn.InstanceNorm2d(1, affine=False, track_running_stats=False)
+        self.InstanceNorm = nn.InstanceNorm2d(6, affine=False, track_running_stats=False)
         self.is_circular = is_circular
         self.zero_mean_normalize = zero_mean_normalize
 
